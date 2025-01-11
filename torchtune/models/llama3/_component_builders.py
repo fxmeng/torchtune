@@ -23,7 +23,7 @@ from torchtune.modules import (
 
 from torchtune.modules.common_utils import _register_reparametrize_state_dict_hooks
 
-from torchtune.modules.peft import DoRALinear, LORA_ATTN_MODULES, LoRALinear
+from torchtune.modules.peft import DoRALinear, PiSSALinear, LORA_ATTN_MODULES, LoRALinear
 
 """
 Component builders for the Llama3 model and popular variants such as LoRA.
@@ -169,6 +169,7 @@ def lora_llama3(
     lora_alpha: float,
     lora_dropout: float = 0.0,
     use_dora: bool = False,
+    pissa_config: dict = None,
     # Quantization args
     quantize_base: bool = False,
 ) -> TransformerDecoder:
@@ -204,6 +205,8 @@ def lora_llama3(
         lora_dropout (float): LoRA dropout probability. Default: 0.0
         use_dora (bool): Decompose the LoRA weight into magnitude and direction, as
             introduced in "DoRA: Weight-Decomposed Low-Rank Adaptation" (https://arxiv.org/abs/2402.09353).
+        pissa_config (bool): Initialize the LoRA weight with the principal singular values and singular vectors, as
+            introduced in "PiSSA: Principal Singular Values and Singular Vectors Adaptation" (https://arxiv.org/abs/2404.02948).
         quantize_base: (bool): Whether to quantize base model weights or not. Only applied to base
             weights within linear layers LoRA is applied to. The final output linear projection is not
             supported for quantization currently.
@@ -227,6 +230,7 @@ def lora_llama3(
         lora_dropout=lora_dropout,
         quantize_base=quantize_base,
         use_dora=use_dora,
+        pissa_config=pissa_config,
     )
 
     hidden_dim = (
@@ -241,6 +245,7 @@ def lora_llama3(
             quantize_base=quantize_base,
             lora_dropout=lora_dropout,
             use_dora=use_dora,
+            pissa_config=pissa_config,
         )
     else:
         mlp = llama3_mlp(
@@ -257,7 +262,13 @@ def lora_llama3(
     tok_embeddings = nn.Embedding(vocab_size, embed_dim)
 
     # TODO: quantize_base is not applied to final output_proj currently.
-    adapter_cls = DoRALinear if use_dora else LoRALinear
+    if pissa_config is not None:
+        adapter_cls = PiSSALinear
+    elif use_dora:
+        adapter_cls = DoRALinear
+    else:
+        adapter_cls = LoRALinear
+        
     output_proj = (
         adapter_cls(
             embed_dim,
@@ -304,6 +315,7 @@ def lora_llama3_self_attention(
     lora_dropout: float = 0.0,
     quantize_base: bool = False,
     use_dora: bool = False,
+    pissa_config: dict = None,
 ) -> MultiHeadAttention:
     """
     Return an instance of :func:`~torchtune.modules.MultiHeadAttention` with LoRA
@@ -330,6 +342,8 @@ def lora_llama3_self_attention(
             LoRA is being applied to. Default is ``False``.
         use_dora (bool): Decompose the LoRA weight into magnitude and direction, as
             introduced in "DoRA: Weight-Decomposed Low-Rank Adaptation" (https://arxiv.org/abs/2402.09353).
+        pissa_config (dict): Initialize the LoRA weight with the principal singular values and singular vectors, as
+            introduced in "PiSSA: Principal Singular Values and Singular Vectors Adaptation" (https://arxiv.org/abs/2404.02948).
 
     Returns:
         MultiHeadAttention: instantiation of self-attention module with LoRA
@@ -345,7 +359,13 @@ def lora_llama3_self_attention(
 
     head_dim = embed_dim // num_heads
     num_kv_heads = num_kv_heads if num_kv_heads else num_heads
-    adapter_cls = DoRALinear if use_dora else LoRALinear
+    if pissa_config is not None:
+        adapter_cls = PiSSALinear
+    elif use_dora:
+        adapter_cls = DoRALinear
+    else:
+        adapter_cls = LoRALinear
+
     q_proj = (
         adapter_cls(
             embed_dim,
@@ -438,8 +458,15 @@ def lora_llama3_mlp(
     lora_dropout: float = 0.0,
     quantize_base: bool = False,
     use_dora: bool = False,
+    pissa_config: dict = None,
 ) -> FeedForward:
-    adapter_cls = DoRALinear if use_dora else LoRALinear
+    if pissa_config:
+        adapter_cls = PiSSALinear
+    elif use_dora:
+        adapter_cls = DoRALinear
+    else:
+        adapter_cls = LoRALinear
+
     gate_proj = adapter_cls(
         in_dim=dim,
         out_dim=hidden_dim,

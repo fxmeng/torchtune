@@ -30,6 +30,7 @@ from torchtune.modules.peft import (
     get_lora_module_names,
     get_merged_lora_ckpt,
     LoRALinear,
+    PiSSALinear,
     set_trainable_params,
     validate_missing_and_unexpected_for_lora,
 )
@@ -441,6 +442,7 @@ class LoRAFinetuneRecipeDistributed(FTRecipeInterface):
         self._lora_attn_modules = list(cfg_model.lora_attn_modules)
         self._apply_lora_to_mlp = cfg_model.apply_lora_to_mlp
         self._apply_lora_to_output = getattr(cfg_model, "apply_lora_to_output", False)
+        self.fsvd_niter = getattr(cfg_model, "fsvd_niter", None)
 
         utils.log_rank_zero(
             log,
@@ -491,7 +493,7 @@ class LoRAFinetuneRecipeDistributed(FTRecipeInterface):
             lora_device = "cpu" if fsdp_cpu_offload else self._device
             for m in model.modules():
                 if (
-                    isinstance(m, LoRALinear) or isinstance(m, DoRALinear)
+                    isinstance(m, LoRALinear) or isinstance(m, DoRALinear) or isinstance(m, PiSSALinear)
                 ) and not lora_weights_state_dict:
                     # lora may not be covered in state dict
                     # if finetune for the 1st time
@@ -511,6 +513,11 @@ class LoRAFinetuneRecipeDistributed(FTRecipeInterface):
         for m in model.modules():
             if hasattr(m, "initialize_dora_magnitude"):
                 m.initialize_dora_magnitude()
+        for n,m in model.named_modules():
+            if hasattr(m, "initialize_pissa"):
+                # Fast SVD conflict with DTensor
+                print(f"Perform SVD on the {n}.")
+                m.initialize_pissa()
 
         validate_missing_and_unexpected_for_lora(
             lora_attn_modules=self._lora_attn_modules,

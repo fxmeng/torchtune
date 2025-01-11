@@ -430,6 +430,12 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
         self._apply_lora_to_output = getattr(cfg_model, "apply_lora_to_output", False)
         self.adapter_params = get_adapter_params(model)
         self._is_dora = any(["magnitude" in k for k in self.adapter_params.keys()])
+        self._is_pissa = getattr(cfg_model, "pissa_config", None) is not None
+        if self._is_pissa:
+            assert isinstance(cfg_model.pissa_config, DictConfig)
+            self.fsvd_niter = cfg_model.pissa_config.get('fsvd_iter')
+            self.quant_iter = cfg_model.pissa_config.get('quant_iter')
+            self.merge_s2uv = cfg_model.pissa_config.get('merge_s2uv') # TODO
         set_trainable_params(model, self.adapter_params)
 
         if compile_model:
@@ -449,6 +455,14 @@ class LoRAFinetuneRecipeSingleDevice(FTRecipeInterface):
             for m in model.modules():
                 if hasattr(m, "initialize_dora_magnitude"):
                     m.initialize_dora_magnitude()
+        if self._is_pissa:
+            for n,m in model.named_modules():
+                if hasattr(m, "initialize_pissa"):
+                    if self.fsvd_niter is not None:
+                        print(f"Perform Fast SVD with niter={self.fsvd_niter} on the {n} layer.")
+                    else:
+                        print(f"Perform SVD on the {n}.")
+                    m.initialize_pissa(self.fsvd_niter)
         if lora_weights_state_dict:
             lora_missing, lora_unexpected = model.load_state_dict(
                 lora_weights_state_dict, strict=False

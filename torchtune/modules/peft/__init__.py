@@ -16,12 +16,14 @@ from ._utils import (  # noqa
     validate_missing_and_unexpected_for_lora,
 )
 from .dora import DoRALinear
+from .pissa import PiSSALinear
 from .lora import LoRALinear, QATLoRALinear
 
 
 __all__ = [
     "AdapterModule",
     "DoRALinear",
+    "PiSSALinear",
     "LoRALinear",
     "QATLoRALinear",
     "get_adapter_params",

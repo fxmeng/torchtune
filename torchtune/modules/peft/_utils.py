@@ -145,11 +145,14 @@ def _get_lora_modules(state_dict: Dict[str, Any]) -> Set[str]:
     Returns:
         Set[str]: Set of keys in the state dict that correspond to LoRA modules.
     """
-    lora_keys = [k for k in state_dict.keys() if "lora" in k or "magnitude" in k]
+    lora_keys = [k for k in state_dict.keys() if "lora" in k or "magnitude" in k or "pissa" in k]
     return set(
         [
             k.replace(".lora_a.weight", "")
             .replace(".lora_b.weight", "")
+            .replace(".pissa_u.weight", "")
+            .replace(".pissa_s", "")
+            .replace(".pissa_v.weight", "")
             .replace(".magnitude", "")
             for k in lora_keys
         ]
@@ -180,14 +183,23 @@ def get_merged_lora_ckpt(
     """
     lora_modules = _get_lora_modules(state_dict)
     for module in lora_modules:
-        lora_a_weight = state_dict[f"{module}.lora_a.weight"]
-        lora_b_weight = state_dict[f"{module}.lora_b.weight"]
+        pissa_u_weight = state_dict.get(f"{module}.pissa_u.weight", None)
+        pissa_s = state_dict.get(f"{module}.pissa_s", None)
+        pissa_v_weight = state_dict.get(f"{module}.pissa_v.weight", None)
+        lora_a_weight = state_dict.get(f"{module}.lora_a.weight", None)
+        lora_b_weight = state_dict.get(f"{module}.lora_b.weight", None)
         lora_magnitude = state_dict.get(f"{module}.magnitude", None)
 
+        # If pissa is present, calculate merged PiSSA weight
+        if pissa_s is not None:
+            state_dict[f"{module}.weight"] += (alpha / rank) * pissa_v_weight @ torch.diag(pissa_s) @ pissa_u_weight
+            del state_dict[f"{module}.pissa_u.weight"]
+            del state_dict[f"{module}.pissa_s"]
+            del state_dict[f"{module}.pissa_v.weight"]
+            
         # If magnitude is present, calculate merged DoRA weight
-        if lora_magnitude is not None:
+        elif lora_magnitude is not None:
             base_weight = state_dict[f"{module}.weight"].to(lora_a_weight.dtype)
-
             lora_weight = (alpha / rank) * lora_b_weight @ lora_a_weight
             merged_weight = base_weight + lora_weight
             weight_norm = torch.linalg.norm(base_weight + lora_weight, dim=1)
@@ -195,15 +207,14 @@ def get_merged_lora_ckpt(
             merged_weight *= mag_norm_scale
             state_dict[f"{module}.weight"] = merged_weight
             del state_dict[f"{module}.magnitude"]
+            del state_dict[f"{module}.lora_a.weight"]
+            del state_dict[f"{module}.lora_b.weight"]
 
         # Otherwise it is just vanilla LoRA
         else:
-            state_dict[f"{module}.weight"] += (
-                (alpha / rank) * lora_b_weight @ lora_a_weight
-            )
-
-        del state_dict[f"{module}.lora_a.weight"]
-        del state_dict[f"{module}.lora_b.weight"]
+            state_dict[f"{module}.weight"] += ((alpha / rank) * lora_b_weight @ lora_a_weight)
+            del state_dict[f"{module}.lora_a.weight"]
+            del state_dict[f"{module}.lora_b.weight"]
 
     return state_dict
 
@@ -295,7 +306,7 @@ def validate_missing_and_unexpected_for_lora(
     )
     is_lora_param = lambda x: any(
         [
-            ".".join([k, "lora"]) in x or ".".join([k, "magnitude"]) in x
+            ".".join([k, "lora"]) in x or ".".join([k, "magnitude"]) in x or ".".join([k, "pissa"]) in x
             for k in lora_modules
         ]
     )

@@ -114,6 +114,7 @@ def lora_llama3_8b(
     lora_dropout: float = 0.0,
     quantize_base: bool = False,
     use_dora: bool = False,
+    pissa_config: dict = None,
 ) -> TransformerDecoder:
     """
     Builder for creating a Llama3 8B model with LoRA enabled.
@@ -136,6 +137,8 @@ def lora_llama3_8b(
         quantize_base (bool): Whether to quantize base model weights
         use_dora (bool): Decompose the LoRA weight into magnitude and direction, as
             introduced in "DoRA: Weight-Decomposed Low-Rank Adaptation" (https://arxiv.org/abs/2402.09353).
+        pissa_config (bool): Initialize the LoRA weight with the principal singular values and singular vectors, as
+            introduced in "PiSSA: Principal Singular Values and Singular Vectors Adaptation" (https://arxiv.org/abs/2404.02948).
 
     Returns:
         TransformerDecoder: Instantiation of Llama3 8B model with LoRA applied
@@ -159,6 +162,7 @@ def lora_llama3_8b(
         lora_dropout=lora_dropout,
         quantize_base=quantize_base,
         use_dora=use_dora,
+        pissa_config=pissa_config,
     )
 
 
@@ -171,6 +175,7 @@ def lora_llama3_70b(
     lora_dropout: float = 0.0,
     quantize_base: bool = False,
     use_dora: bool = False,
+    pissa_config: dict = None,
 ) -> TransformerDecoder:
     """
     Builder for creating a Llama3 70B model with LoRA enabled.
@@ -193,6 +198,8 @@ def lora_llama3_70b(
         quantize_base (bool): Whether to quantize base model weights
         use_dora (bool): Decompose the LoRA weight into magnitude and direction, as
             introduced in "DoRA: Weight-Decomposed Low-Rank Adaptation" (https://arxiv.org/abs/2402.09353).
+        pissa_config (dict): Initialize the LoRA weight with the principal singular values and singular vectors, as
+            introduced in "PiSSA: Principal Singular Values and Singular Vectors Adaptation" (https://arxiv.org/abs/2404.02948).
 
     Returns:
         TransformerDecoder: Instantiation of Llama3 70B model with LoRA applied
@@ -216,6 +223,7 @@ def lora_llama3_70b(
         lora_dropout=lora_dropout,
         quantize_base=quantize_base,
         use_dora=use_dora,
+        pissa_config=pissa_config,
     )
 
 
